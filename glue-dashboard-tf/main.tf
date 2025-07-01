@@ -6,107 +6,395 @@ resource "aws_cloudwatch_dashboard" "glue_dashboard" {
   dashboard_name = var.dashboard_name
 
   dashboard_body = jsonencode({
-    widgets = [
-
-      ## 1. CPU Efficiency Widget
-      {
-        "type": "metric",
-        "x": 0, "y": 0, "width": 12, "height": 6,
-        "properties": {
-          "title": "Glue CPU Efficiency",
-          "view": "timeSeries",
-          "stacked": false,
-          "region": var.aws_region,
-          "metrics": [
-            [ "Glue", "cpu.utilization", "JobName", "ALL", { "stat": "Average" } ]
-          ],
-          "period": 300,
-          "stat": "Average",
-          "yAxis": {
-            "left": { "label": "CPU %" }
-          }
+    "widgets": [
+        {
+            "type": "metric",
+            "x": 0,
+            "y": 3,
+            "width": 11,
+            "height": 3,
+            "properties": {
+                "metrics": [
+                    [ { "expression": "METRICS()/3600", "label": "", "id": "e1", "region": "us-east-1" } ],
+                    [ "Glue", "glue.driver.aggregate.elapsedTime", "Type", "count", "JobRunId", "ALL", "JobName", "udx-cust-mesh-d-historical-glue-job-step-4-neptune-${var.environment}", { "id": "m1", "visible": false, "region": "us-east-1" } ],
+                    [ "...", "udx-cust-mesh-d-neptune-loader-job-${var.environment}", { "id": "m2", "visible": false, "region": "us-east-1" } ],
+                    [ "...", "udx-cust-mesh-d-historical-glue-job-step-3-opensearch-${var.environment}", { "id": "m3", "visible": false, "region": "us-east-1" } ],
+                    [ "...", "udx-cust-mesh-d-incr-id-res-job-${var.environment}", { "id": "m4", "visible": false, "region": "us-east-1" } ]
+                ],
+                "view": "singleValue",
+                "stacked": false,
+                "region": "us-east-1",
+                "period": 86400,
+                "stat": "Average",
+                "yAxis": {
+                    "left": {
+                        "showUnits": true
+                    }
+                },
+                "singleValueFullPrecision": false,
+                "liveData": false,
+                "sparkline": false,
+                "setPeriodToTimeRange": true,
+                "title": "Average Glue Job  Execution Duration ( Hrs )"
+            }
+        },
+        {
+            "type": "metric",
+            "x": 11,
+            "y": 11,
+            "width": 13,
+            "height": 5,
+            "properties": {
+                "metrics": [
+                    [ "Glue", "glue.driver.workerUtilization", "Type", "gauge", "ObservabilityGroup", "resource_utilization", "JobRunId", "ALL", "JobName", "udx-cust-mesh-d-historical-glue-job-step-4-neptune-${var.environment}", { "id": "m1", "region": "us-east-1", "color": "#ff7f0e" } ],
+                    [ "...", "udx-cust-mesh-d-neptune-loader-job-${var.environment}", { "id": "m2", "region": "us-east-1" } ],
+                    [ "...", "udx-cust-mesh-d-historical-glue-job-step-3-opensearch-${var.environment}", { "id": "m3", "region": "us-east-1", "color": "#e377c2" } ],
+                    [ "...", "udx-cust-mesh-d-incr-id-res-job-${var.environment}", { "id": "m4", "region": "us-east-1", "color": "#17becf" } ]
+                ],
+                "view": "gauge",
+                "region": "us-east-1",
+                "period": 86400,
+                "stat": "Average",
+                "yAxis": {
+                    "left": {
+                        "min": 0,
+                        "max": 100
+                    }
+                },
+                "setPeriodToTimeRange": true,
+                "title": "Glue Worker Utilization ( % )",
+                "stacked": false
+            }
+        },
+        {
+            "type": "metric",
+            "x": 11,
+            "y": 0,
+            "width": 13,
+            "height": 3,
+            "properties": {
+                "sparkline": false,
+                "view": "singleValue",
+                "stacked": false,
+                "region": "us-east-1",
+                "stat": "Sum",
+                "period": 86400,
+                "metrics": [
+                    [ "Glue", "glue.error.ALL", "Type", "count", "ObservabilityGroup", "error", "JobRunId", "ALL", "JobName", "udx-cust-mesh-d-historical-glue-job-step-4-neptune-${var.environment}", { "region": "us-east-1" } ],
+                    [ "...", "ALL", { "region": "us-east-1" } ]
+                ],
+                "title": "Glue Job - Failure Count"
+            }
+        },
+        {
+            "type": "metric",
+            "x": 0,
+            "y": 0,
+            "width": 11,
+            "height": 3,
+            "properties": {
+                "sparkline": false,
+                "metrics": [
+                    [ "Glue", "glue.succeed.ALL", "Type", "count", "ObservabilityGroup", "error", "JobRunId", "ALL", "JobName", "udx-cust-mesh-d-neptune-loader-job-${var.environment}", { "region": "us-east-1" } ],
+                    [ "...", "udx-cust-mesh-d-historical-glue-job-step-3-opensearch-${var.environment}", { "region": "us-east-1" } ],
+                    [ "...", "udx-cust-mesh-d-historical-glue-job-step-4-neptune-${var.environment}", { "region": "us-east-1" } ],
+                    [ "...", "udx-cust-mesh-d-incr-id-res-job-${var.environment}", { "region": "us-east-1" } ]
+                ],
+                "view": "singleValue",
+                "stacked": false,
+                "region": "us-east-1",
+                "stat": "Sum",
+                "period": 86400,
+                "title": "Glue Job - Success Count"
+            }
+        },
+        {
+            "type": "metric",
+            "x": 0,
+            "y": 6,
+            "width": 11,
+            "height": 5,
+            "properties": {
+                "metrics": [
+                    [ { "expression": "100*(m1)", "label": "udx-cust-mesh-d-large-source-etl-glue-job-${var.environment}", "id": "e1" } ],
+                    [ { "expression": "100*(m2)", "label": "udx-cust-mesh-d-incr-id-res-job-${var.environment}", "id": "e2", "color": "#2ca02c" } ],
+                    [ { "expression": "100*(m3)", "label": "udx-cust-mesh-d-neptune-loader-job-${var.environment}", "id": "e3", "color": "#ff7f0e" } ],
+                    [ { "expression": "100*(m4)", "label": "udx-cust-mesh-d-historical-glue-job-step-3-opensearch-${var.environment}", "id": "e4", "color": "#7f7f7f" } ],
+                    [ { "expression": "100*(m5)", "label": "udx-cust-mesh-d-historical-glue-job-step-4-neptune-${var.environment}", "id": "e5", "color": "#8c564b" } ],
+                    [ "Glue", "glue.ALL.system.cpuSystemLoad", "Type", "gauge", "JobRunId", "ALL", "JobName", "udx-cust-mesh-d-large-source-etl-glue-job-${var.environment}", { "id": "m1", "visible": false } ],
+                    [ "...", "udx-cust-mesh-d-incr-id-res-job-${var.environment}", { "id": "m2", "visible": false } ],
+                    [ "...", "udx-cust-mesh-d-neptune-loader-job-${var.environment}", { "id": "m3", "visible": false } ],
+                    [ "...", "udx-cust-mesh-d-historical-glue-job-step-3-opensearch-${var.environment}", { "id": "m4", "visible": false } ],
+                    [ "...", "udx-cust-mesh-d-historical-glue-job-step-4-neptune-${var.environment}", { "id": "m5", "visible": false } ]
+                ],
+                "view": "gauge",
+                "region": "us-east-1",
+                "yAxis": {
+                    "left": {
+                        "min": 0,
+                        "max": 100
+                    }
+                },
+                "stat": "Average",
+                "period": 86400,
+                "title": "Average CPU Utilization ( % )"
+            }
+        },
+        {
+            "type": "metric",
+            "x": 0,
+            "y": 11,
+            "width": 11,
+            "height": 5,
+            "properties": {
+                "metrics": [
+                    [ { "expression": "m1/1000", "label": "udx-cust-mesh-d-historical-glue-job-step-4-neptune-${var.environment}", "id": "e1" } ],
+                    [ { "expression": "m2/1000", "label": "udx-cust-mesh-d-historical-glue-job-step-3-opensearch-${var.environment}", "id": "e2" } ],
+                    [ { "expression": "m3/1000", "label": "udx-cust-mesh-d-neptune-loader-job-${var.environment}", "id": "e3" } ],
+                    [ { "expression": "m4/1000", "label": "udx-cust-mesh-d-incr-id-res-job-${var.environment}", "id": "e4" } ],
+                    [ { "expression": "m5/1000", "label": "udx-cust-mesh-d-large-source-etl-glue-job-${var.environment}", "id": "e5" } ],
+                    [ "Glue", "glue.driver.BlockManager.disk.diskSpaceUsed_MB", "Type", "gauge", "JobRunId", "ALL", "JobName", "udx-cust-mesh-d-historical-glue-job-step-4-neptune-${var.environment}", { "region": "us-east-1", "id": "m1", "visible": false } ],
+                    [ "...", "udx-cust-mesh-d-historical-glue-job-step-3-opensearch-${var.environment}", { "region": "us-east-1", "id": "m2", "visible": false } ],
+                    [ "...", "udx-cust-mesh-d-neptune-loader-job-${var.environment}", { "region": "us-east-1", "id": "m3", "visible": false } ],
+                    [ "...", "udx-cust-mesh-d-incr-id-res-job-${var.environment}", { "region": "us-east-1", "id": "m4", "visible": false } ],
+                    [ "...", "udx-cust-mesh-d-large-source-etl-glue-job-${var.environment}", { "region": "us-east-1", "id": "m5", "visible": false } ]
+                ],
+                "view": "singleValue",
+                "region": "us-east-1",
+                "stat": "Average",
+                "period": 86400,
+                "legend": {
+                    "position": "right"
+                },
+                "setPeriodToTimeRange": true,
+                "title": "Average Disk Utilization ( GB )"
+            }
+        },
+        {
+            "type": "metric",
+            "x": 11,
+            "y": 6,
+            "width": 13,
+            "height": 5,
+            "properties": {
+                "metrics": [
+                    [ { "expression": "100*m1", "label": "udx-cust-mesh-d-incr-id-res-job-${var.environment}", "id": "e1", "color": "#ff7f0e", "region": "us-east-1" } ],
+                    [ { "expression": "100*m2", "label": "udx-cust-mesh-d-large-source-etl-glue-job-${var.environment}", "id": "e2", "region": "us-east-1" } ],
+                    [ { "expression": "100*m3", "label": "udx-cust-mesh-d-neptune-loader-job-${var.environment}", "id": "e3", "color": "#ffbb78", "region": "us-east-1" } ],
+                    [ { "expression": "100*m4", "label": "udx-cust-mesh-d-historical-glue-job-step-3-opensearch-${var.environment}", "id": "e4", "color": "#e377c2", "region": "us-east-1" } ],
+                    [ { "expression": "100*m5", "label": "udx-cust-mesh-d-historical-glue-job-step-4-neptune-${var.environment}", "id": "e5", "color": "#17becf", "region": "us-east-1" } ],
+                    [ "Glue", "glue.ALL.jvm.heap.usage", "Type", "gauge", "JobRunId", "ALL", "JobName", "udx-cust-mesh-d-incr-id-res-job-${var.environment}", { "id": "m1", "visible": false, "region": "us-east-1" } ],
+                    [ "...", "udx-cust-mesh-d-large-source-etl-glue-job-${var.environment}", { "id": "m2", "visible": false, "region": "us-east-1" } ],
+                    [ "...", "udx-cust-mesh-d-neptune-loader-job-${var.environment}", { "id": "m3", "visible": false, "region": "us-east-1" } ],
+                    [ "...", "udx-cust-mesh-d-historical-glue-job-step-3-opensearch-${var.environment}", { "id": "m4", "visible": false, "region": "us-east-1" } ],
+                    [ "...", "udx-cust-mesh-d-historical-glue-job-step-4-neptune-${var.environment}", { "id": "m5", "visible": false, "region": "us-east-1" } ]
+                ],
+                "view": "gauge",
+                "region": "us-east-1",
+                "stat": "Average",
+                "period": 86400,
+                "yAxis": {
+                    "left": {
+                        "min": 0,
+                        "max": 100
+                    }
+                },
+                "title": "Average Memory Utilization ( % )"
+            }
+        },
+        {
+            "type": "metric",
+            "x": 0,
+            "y": 16,
+            "width": 11,
+            "height": 6,
+            "properties": {
+                "metrics": [
+                    [ { "expression": "m1/1000000000", "label": "udx-cust-mesh-d-incr-id-res-job-${var.environment}", "id": "e1", "region": "us-east-1" } ],
+                    [ { "expression": "m2/1000000000", "label": "udx-cust-mesh-d-historical-glue-job-step-3-opensearch-${var.environment}", "id": "e2", "region": "us-east-1" } ],
+                    [ { "expression": "m3/1000000000", "label": "udx-cust-mesh-d-historical-glue-job-step-4-neptune-${var.environment}", "id": "e3", "region": "us-east-1" } ],
+                    [ { "expression": "m4/1000000000", "label": "udx-cust-mesh-d-large-source-etl-glue-job-${var.environment}", "id": "e4", "region": "us-east-1" } ],
+                    [ { "expression": "m5/1000000000", "label": "udx-cust-mesh-d-neptune-loader-job-${var.environment}", "id": "e5", "region": "us-east-1" } ],
+                    [ "Glue", "glue.driver.aggregate.bytesRead", "Type", "count", "JobRunId", "ALL", "JobName", "udx-cust-mesh-d-incr-id-res-job-${var.environment}", { "id": "m1", "visible": false, "region": "us-east-1" } ],
+                    [ "Glue", "glue.driver.aggregate.bytesRead", "Type", "count", "JobRunId", "ALL", "JobName", "udx-cust-mesh-d-historical-glue-job-step-3-opensearch-${var.environment}", { "id": "m2", "visible": false, "region": "us-east-1" } ],
+                    [ "Glue", "glue.driver.aggregate.bytesRead", "Type", "count", "JobRunId", "ALL", "JobName", "udx-cust-mesh-d-historical-glue-job-step-4-neptune-${var.environment}", { "id": "m3", "visible": false, "region": "us-east-1" } ],
+                    [ "Glue", "glue.driver.aggregate.bytesRead", "Type", "count", "JobRunId", "ALL", "JobName", "udx-cust-mesh-d-large-source-etl-glue-job-${var.environment}", { "id": "m4", "visible": false, "region": "us-east-1" } ],
+                    [ "Glue", "glue.driver.aggregate.bytesRead", "Type", "count", "JobRunId", "ALL", "JobName", "udx-cust-mesh-d-neptune-loader-job-${var.environment}", { "id": "m5", "visible": false, "region": "us-east-1" } ]
+                ],
+                "sparkline": true,
+                "view": "timeSeries",
+                "region": "us-east-1",
+                "stat": "Sum",
+                "period": 86400,
+                "stacked": true,
+                "legend": {
+                    "position": "right"
+                },
+                "yAxis": {
+                    "left": {
+                        "label": "Data Read ( GB )",
+                        "showUnits": false
+                    }
+                },
+                "title": "Average Data Read from all Sources ( GB )"
+            }
+        },
+        {
+            "type": "metric",
+            "x": 11,
+            "y": 16,
+            "width": 13,
+            "height": 6,
+            "properties": {
+                "metrics": [
+                    [ { "expression": "m1/1000000000", "label": "udx-cust-mesh-d-large-source-etl-glue-job-${var.environment}", "id": "e1", "region": "us-east-1" } ],
+                    [ { "expression": "m2/1000000000", "label": "udx-cust-mesh-d-incr-id-res-job-${var.environment}", "id": "e2", "region": "us-east-1" } ],
+                    [ { "expression": "m3/1000000000", "label": "udx-cust-mesh-d-historical-glue-job-step-4-neptune-${var.environment}", "id": "e3", "region": "us-east-1" } ],
+                    [ "Glue", "glue.driver.bytesWritten", "Type", "gauge", "ObservabilityGroup", "throughput", "Sink", "ALL", "JobRunId", "ALL", "JobName", "udx-cust-mesh-d-large-source-etl-glue-job-${var.environment}", { "id": "m1", "visible": false, "period": 86400, "region": "us-east-1" } ],
+                    [ "...", "udx-cust-mesh-d-incr-id-res-job-${var.environment}", { "id": "m2", "visible": false, "period": 86400, "region": "us-east-1" } ],
+                    [ "...", "udx-cust-mesh-d-historical-glue-job-step-4-neptune-${var.environment}", { "id": "m3", "visible": false, "period": 86400, "region": "us-east-1" } ]
+                ],
+                "view": "timeSeries",
+                "stacked": true,
+                "region": "us-east-1",
+                "stat": "Average",
+                "period": 300,
+                "legend": {
+                    "position": "right"
+                },
+                "yAxis": {
+                    "left": {
+                        "label": "Data Written to all Sinks ( GB )",
+                        "showUnits": false
+                    }
+                },
+                "title": "Average Data Written to all Sinks ( GB )"
+            }
+        },
+        {
+            "type": "alarm",
+            "x": 0,
+            "y": 30,
+            "width": 24,
+            "height": 2,
+            "properties": {
+                "title": "Glue Job Alarm Status",
+                "alarms": [
+                    "arn:aws:cloudwatch:us-east-1:481665113918:alarm:udx-cust-mesh-d-neptune-memory-${var.environment}",
+                    "arn:aws:cloudwatch:us-east-1:481665113918:alarm:udx-cust-mesh-d-opensearch-cpu-util-${var.environment}",
+                    "arn:aws:cloudwatch:us-east-1:481665113918:alarm:udx-cust-mesh-d-neptune-database-capacity-${var.environment}",
+                    "arn:aws:cloudwatch:us-east-1:481665113918:alarm:udx-cust-mesh-d-neptune-cpu-utilization-${var.environment}"
+                ]
+            }
+        },
+        {
+            "type": "metric",
+            "x": 0,
+            "y": 22,
+            "width": 11,
+            "height": 4,
+            "properties": {
+                "metrics": [
+                    [ "Glue", "glue.driver.recordsRead", "Type", "gauge", "ObservabilityGroup", "throughput", "JobRunId", "ALL", "JobName", "udx-cust-mesh-d-large-source-etl-glue-job-${var.environment}", "Source", "ALL" ],
+                    [ "...", "udx-cust-mesh-d-incr-id-res-job-${var.environment}", ".", "." ],
+                    [ "...", "udx-cust-mesh-d-neptune-loader-job-${var.environment}", ".", "." ]
+                ],
+                "view": "singleValue",
+                "stacked": false,
+                "region": "us-east-1",
+                "title": "Average No.of Records Read across all sources(Count)",
+                "setPeriodToTimeRange": true,
+                "sparkline": false,
+                "period": 86400,
+                "stat": "Average"
+            }
+        },
+        {
+            "type": "metric",
+            "x": 0,
+            "y": 26,
+            "width": 11,
+            "height": 4,
+            "properties": {
+                "metrics": [
+                    [ "Glue", "glue.driver.filesRead", "Type", "gauge", "ObservabilityGroup", "throughput", "JobRunId", "ALL", "JobName", "udx-cust-mesh-d-neptune-loader-job-${var.environment}", "Source", "ALL", { "region": "us-east-1" } ],
+                    [ "...", "udx-cust-mesh-d-incr-id-res-job-${var.environment}", ".", ".", { "region": "us-east-1" } ],
+                    [ "...", "udx-cust-mesh-d-large-source-etl-glue-job-${var.environment}", ".", ".", { "region": "us-east-1" } ]
+                ],
+                "view": "singleValue",
+                "stacked": false,
+                "region": "us-east-1",
+                "setPeriodToTimeRange": true,
+                "sparkline": false,
+                "title": "Average No. of Files Read across all sources (Count)",
+                "period": 86400,
+                "stat": "Average"
+            }
+        },
+        {
+            "type": "metric",
+            "x": 11,
+            "y": 26,
+            "width": 13,
+            "height": 4,
+            "properties": {
+                "metrics": [
+                    [ "Glue", "glue.driver.recordsWritten", "Type", "gauge", "ObservabilityGroup", "throughput", "Sink", "ALL", "JobRunId", "ALL", "JobName", "udx-cust-mesh-d-incr-id-res-job-${var.environment}", { "region": "us-east-1" } ],
+                    [ "...", "udx-cust-mesh-d-large-source-etl-glue-job-${var.environment}", { "region": "us-east-1" } ]
+                ],
+                "view": "singleValue",
+                "stacked": false,
+                "region": "us-east-1",
+                "setPeriodToTimeRange": true,
+                "sparkline": false,
+                "title": "Average No.of Records Written to all sinks (Count)",
+                "period": 3600,
+                "stat": "Average"
+            }
+        },
+        {
+            "type": "metric",
+            "x": 11,
+            "y": 22,
+            "width": 13,
+            "height": 4,
+            "properties": {
+                "metrics": [
+                    [ "Glue", "glue.driver.filesWritten", "Type", "gauge", "ObservabilityGroup", "throughput", "Sink", "ALL", "JobRunId", "ALL", "JobName", "udx-cust-mesh-d-incr-id-res-job-${var.environment}", { "region": "us-east-1" } ],
+                    [ "...", "udx-cust-mesh-d-large-source-etl-glue-job-${var.environment}", { "region": "us-east-1" } ]
+                ],
+                "view": "singleValue",
+                "stacked": false,
+                "region": "us-east-1",
+                "setPeriodToTimeRange": true,
+                "sparkline": false,
+                "title": "Average No. of Files written to all Sinks(Count)",
+                "period": 86400,
+                "stat": "Average"
+            }
+        },
+        {
+            "type": "metric",
+            "x": 11,
+            "y": 3,
+            "width": 13,
+            "height": 3,
+            "properties": {
+                "metrics": [
+                    [ "Glue", "glue.driver.skewness.job", "Type", "gauge", "ObservabilityGroup", "job_performance", "JobRunId", "ALL", "JobName", "udx-cust-mesh-d-large-source-etl-glue-job-${var.environment}" ],
+                    [ "...", "udx-cust-mesh-d-incr-id-res-job-${var.environment}" ],
+                    [ "...", "udx-cust-mesh-d-neptune-loader-job-${var.environment}" ]
+                ],
+                "view": "singleValue",
+                "stacked": false,
+                "region": "us-east-1",
+                "setPeriodToTimeRange": true,
+                "sparkline": false,
+                "period": 86400,
+                "stat": "Average",
+                "title": "Average Glue Job Skewness"
+            }
         }
-      },
-
-      ## 2. Memory Utilization Widget
-      {
-        "type": "metric",
-        "x": 12, "y": 0, "width": 12, "height": 6,
-        "properties": {
-          "title": "Glue Memory Utilization",
-          "view": "timeSeries",
-          "stacked": false,
-          "region": var.aws_region,
-          "metrics": [
-            [ "Glue", "memory.utilization", "JobName", "ALL", { "stat": "Average" } ]
-          ],
-          "period": 300,
-          "stat": "Average",
-          "yAxis": {
-            "left": { "label": "Memory %" }
-          }
-        }
-      },
-
-      ## 3. Failed Jobs
-      {
-        "type": "metric",
-        "x": 0, "y": 6, "width": 12, "height": 6,
-        "properties": {
-          "title": "Failed Glue Jobs",
-          "view": "timeSeries",
-          "stacked": false,
-          "region": var.aws_region,
-          "metrics": [
-            [ "Glue", "glue.job.failed.count", "JobName", "ALL", { "stat": "Sum" } ]
-          ],
-          "period": 300,
-          "stat": "Sum",
-          "yAxis": {
-            "left": { "label": "Count" }
-          }
-        }
-      },
-
-      ## 4. Successful Jobs
-      {
-        "type": "metric",
-        "x": 12, "y": 6, "width": 12, "height": 6,
-        "properties": {
-          "title": "Successful Glue Jobs",
-          "view": "timeSeries",
-          "stacked": false,
-          "region": var.aws_region,
-          "metrics": [
-            [ "Glue", "glue.job.succeeded.count", "JobName", "ALL", { "stat": "Sum" } ]
-          ],
-          "period": 300,
-          "stat": "Sum",
-          "yAxis": {
-            "left": { "label": "Count" }
-          }
-        }
-      },
-
-      ## 5. Running Jobs
-      {
-        "type": "metric",
-        "x": 0, "y": 12, "width": 24, "height": 6,
-        "properties": {
-          "title": "Running Glue Jobs",
-          "view": "timeSeries",
-          "stacked": false,
-          "region": var.aws_region,
-          "metrics": [
-            [ "Glue", "glue.job.running.count", "JobName", "ALL", { "stat": "Average" } ]
-          ],
-          "period": 300,
-          "stat": "Average",
-          "yAxis": {
-            "left": { "label": "Running Count" }
-          }
-        }
-      }
     ]
-  })
+})
 }
