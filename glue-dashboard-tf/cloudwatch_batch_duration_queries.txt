@@ -1,18 +1,18 @@
 ### 1. Superbatch Execution Duration
 ---------------------------------------------------
 fields @timestamp, @message
-| filter @message like /Start of loading superbatch data|after pre_ml_rules/
+| filter @message like /get_next_candidate_identities_batch|Closing down clientserver connection/
 | sort @timestamp asc
 | stats 
-    min(@timestamp) as start_time,
-    max(@timestamp) as end_time,
-    end_time - start_time as duration_ms
+    min(@timestamp) as superbatch_start,
+    max(@timestamp) as superbatch_end,
+    superbatch_end - superbatch_start as superbatch_duration_ms
 
 
 ### 2. OpenSearch Load Time
 ---------------------------------------------------
 fields @timestamp, @message
-| filter @message like /Before pre_search_rules|After pre_search_rules/
+| filter @message like /write to OpenSearch|write to OpenSearch.*Done/
 | sort @timestamp asc
 | stats 
     min(@timestamp) as opensearch_start,
@@ -23,9 +23,9 @@ fields @timestamp, @message
 ### 3. Neptune Load Time
 ---------------------------------------------------
 fields @timestamp, @message
-| filter @message like /perform_id_resolution_and_after\(\)|create_or_update_er_input_table\(\)/
+| filter @message like /get_next_candidate_identities_batch|Closing down clientserver connection/
 | sort @timestamp asc
 | stats 
-    min(@timestamp) as neptune_start,
-    max(@timestamp) as neptune_end,
-    neptune_end - neptune_start as neptune_duration_ms
+    min(@timestamp) as superbatch_start,
+    max(@timestamp) as superbatch_end,
+    superbatch_end - superbatch_start as superbatch_duration_ms
