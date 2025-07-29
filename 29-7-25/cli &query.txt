@@ -1,0 +1,54 @@
+# STEP 1: Metric Filter for retry_count
+aws logs put-metric-filter \
+  --log-group-name "/aws-glue/jobs/error" \
+  --filter-name "OpenSearchRetryCountFilter" \
+  --filter-pattern '"opensearch_client_error_retry_count is #" ?retry_count' \
+  --metric-transformations metricName=OpenSearchRetryCount,metricNamespace=OpenSearchMetrics,metricValue=$retry_count
+
+# STEP 2: Metric Filter for retry_delay
+aws logs put-metric-filter \
+  --log-group-name "/aws-glue/jobs/error" \
+  --filter-name "OpenSearchRetryDelayFilter" \
+  --filter-pattern '"next opensearch_client_retry#0 in" ? ?retry_delay "seconds"' \
+  --metric-transformations metricName=OpenSearchRetryDelaySeconds,metricNamespace=OpenSearchMetrics,metricValue=$retry_delay
+
+# STEP 3: Alarm for High Retry Count
+aws cloudwatch put-metric-alarm \
+  --alarm-name "HighOpenSearchRetryCount" \
+  --metric-name "OpenSearchRetryCount" \
+  --namespace "OpenSearchMetrics" \
+  --statistic Maximum \
+  --period 300 \
+  --threshold 5 \
+  --comparison-operator GreaterThanOrEqualToThreshold \
+  --evaluation-periods 1 \
+  --alarm-actions arn:aws:sns:us-east-1:123456789012:NotifyMe \
+  --ok-actions arn:aws:sns:us-east-1:123456789012:NotifyMe \
+  --actions-enabled
+
+# STEP 4: Alarm for High Retry Delay
+aws cloudwatch put-metric-alarm \
+  --alarm-name "HighOpenSearchRetryDelay" \
+  --metric-name "OpenSearchRetryDelaySeconds" \
+  --namespace "OpenSearchMetrics" \
+  --statistic Maximum \
+  --period 300 \
+  --threshold 5 \
+  --comparison-operator GreaterThanOrEqualToThreshold \
+  --evaluation-periods 1 \
+  --alarm-actions arn:aws:sns:us-east-1:123456789012:NotifyMe \
+  --ok-actions arn:aws:sns:us-east-1:123456789012:NotifyMe \
+  --actions-enabled
+
+-----------------------------the above are cli commands, this is for QL for the Dashboard--------------------- 
+fields @timestamp, @message
+| filter @message like /msearch/
+| parse @message /(?<job_id>\d{14}_(?<job_type>\w+)_search_\w+)/ 
+| parse @message /opensearch_client_error_retry_count is #(?<retry_count>\d+)/ 
+| parse @message /next opensearch_client_retry#0 in (?<retry_delay>\d+\.\d+) seconds/
+| stats 
+    max(retry_count) as max_retry_count, 
+    latest(retry_delay) as retry_delay_secs 
+    by job_id, job_type
+| sort job_type, job_id
+
