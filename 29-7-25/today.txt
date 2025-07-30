@@ -2,6 +2,10 @@ fields @timestamp, @message
 | filter @message like /msearch: done/
 | parse @message /(?<job_id>\d{14}_[\w]+_search_\w+)/ 
 | parse @message /msearch: done (?<done>\d+) of (?<total>\d+)/
-| parse @message /opensearch_client_error_retry_count is #(?<retry_count>\d+)/ 
-| stats max(done) as last_done, max(total) as total, max(retry_count) as max_retry_count by bin(1m), job_id
+| parse @message /opensearch_client_error_retry_count is #(?<retry_count>\d+)/
+| stats 
+    max(done) as last_done, 
+    max(total) as total, 
+    max(retry_count) as max_retry_count 
+    by bin(1m), job_id
 | sort job_id, bin(1m)
