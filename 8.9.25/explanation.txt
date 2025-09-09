@@ -1,0 +1,35 @@
+1. glue.driver.aggregate.elapsedTime
+	•	What it is:
+The total “wall-clock” time that the Glue driver spent running the job. The driver is like the coordinator that tells all workers (executors) what to do. This metric is essentially how long the whole job took to execute from start to finish.
+	•	Why it matters:
+If this value is consistently high, it means your jobs are running slow. Causes could be too much data, unoptimized joins, shuffles, or not enough compute capacity. Comparing this against row counts and file size helps pinpoint whether it’s data volume or code inefficiency.
+
+
+2. glue.driver.fileRead
+	•	What it is:
+The total size of data (in bytes/MB/GB) that the job read from storage (e.g., S3). Every scan of a file adds to this number.
+	•	Why it matters:
+If this is very high, the job might be reading entire datasets even if you only need a portion. For example, not partitioning your S3 data correctly could make Glue read thousands of files when only a handful are needed. More file reads → longer execution time and higher cost.
+
+
+
+3. glue.driver.fileWritten
+	•	What it is:
+The total size of data that the job wrote back to storage (again, usually S3). This is the “final output” volume of your job.
+	•	Why it matters:
+A sudden spike here means your transformations are producing much more data than expected (maybe duplicate records or exploded joins). If the number is unexpectedly small, maybe filters or errors dropped too much data. Tracking this helps you validate that the pipeline produced the right amount of output.
+
+
+4. glue.driver.rowRead
+	•	What it is:
+The total number of rows (records) read during the job. Every row in your source files or tables counts here.
+	•	Why it matters:
+If this number is much larger than expected, it means the job is pulling in more data than it should. For example, maybe a filter condition isn’t applied early enough, so unnecessary rows are being processed. That wastes compute time and memory.
+
+
+
+5. glue.driver.rowWritten
+	•	What it is:
+The total number of rows that were written as output after your transformations.
+	•	Why it matters:
+This is the checkpoint to confirm: “Did my job produce the expected number of records?” If you expected millions and only see a few thousand, then something went wrong. If you see far more than expected, maybe your joins caused duplication. It’s one of the fastest sanity checks you can do after a Glue job.
