@@ -3,3 +3,19 @@ Rule_150’s job was to make sure that if two records had the same guest ID, the
 
 After the change:
 We improved Rule_150 so that it also looks at email. Now, if the guest ID is new but the email already exists in the system, it will reuse the UXID linked to that email instead of creating a new one. This way, the same person with the same email won’t get split into multiple UXIDs just because their guest ID changed. In short: the rule still gives priority to guest IDs, but now uses email as a safety net to keep people unified under one UXID.
+
+
+
+Code Explaination:
+	•	The rule begins by checkpointing the DataFrame to stabilize Spark execution and avoid recomputation issues.
+	•	For each record:
+	•	If rules_guest_id exists but uxid is null, generate a new UUID and assign it as simple_uxid.
+	•	Otherwise, keep the existing uxid.
+	•	An email fallback step runs next:
+	•	If no UXID was found from guest_id, but the email matches another record with a UXID, reuse that UXID.
+	•	A deterministic window (ordered by timestamp, confidence, and batch id) ensures the same email always maps to the same UXID.
+	•	A graph is built where each simple_uxid is a node, and edges connect UXIDs that share the same guest_id.
+	•	Running connectedComponents() groups UXIDs that are linked directly or indirectly through guest_ids.
+	•	Within each group (component), a final UXID is picked deterministically (earliest timestamp, highest confidence, lowest batch id).
+	•	Sanity checks ensure no simple_uxid belongs to more than one component; if so, an error is raised.
+	•	The final DataFrame outputs consistent UXIDs and confidence values, while dropping temporary helper columns (new_uxid, simple_uxid, email_uxid, component).
