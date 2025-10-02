@@ -1,0 +1,5 @@
+Before the change:
+Rule_150’s job was to make sure that if two records had the same guest ID, they always got the same UXID. If a new guest ID showed up, the system gave it a brand-new UXID. This worked fine for cases where guest IDs were stable, but it meant that if the same person had different guest IDs (but the same email), they would end up with two different UXIDs. In simple terms: it kept guest IDs consistent, but ignored emails.
+
+After the change:
+We improved Rule_150 so that it also looks at email. Now, if the guest ID is new but the email already exists in the system, it will reuse the UXID linked to that email instead of creating a new one. This way, the same person with the same email won’t get split into multiple UXIDs just because their guest ID changed. In short: the rule still gives priority to guest IDs, but now uses email as a safety net to keep people unified under one UXID.
