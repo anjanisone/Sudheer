@@ -1,0 +1,30 @@
+| Source | Class File | Field Name | Type | Transformation |
+|---------|-------------|-------------|------|----------------|
+| UOR_LOEWS | loewsClass.py | birth_date | Date | Convert to `YYYY-MM-DD`, nullify if > today |
+|  |  | account_open_date | Date | Convert to `YYYY-MM-DD`, nullify if > today |
+|  |  | record_created_timestamp | Timestamp | Convert to `YYYY-MM-DDTHH:MM:SSZ`, nullify if > current time |
+|  |  | record_last_updated_timestamp | Timestamp | Convert to `YYYY-MM-DDTHH:MM:SSZ`, nullify if > current time |
+| UDX_TRISEPT | triseptClass.py | birth_date | Date | Convert to `YYYY-MM-DD`, nullify if > today |
+|  |  | opt_in_date | Date | Convert to `YYYY-MM-DD`, nullify if > today |
+|  |  | record_created_timestamp | Timestamp | Convert to `YYYY-MM-DDTHH:MM:SSZ`, nullify if > current time |
+|  |  | record_last_updated_timestamp | Timestamp | Convert to `YYYY-MM-DDTHH:MM:SSZ`, nullify if > current time |
+| USH_TRISEPT | triseptGuestbookClass.py | guest_created_date | Date | Convert to `YYYY-MM-DD`, nullify if > today |
+|  |  | guest_modified_date | Date | Convert to `YYYY-MM-DD`, nullify if > today |
+|  |  | record_created_timestamp | Timestamp | Convert to `YYYY-MM-DDTHH:MM:SSZ`, nullify if > current time |
+|  |  | record_last_updated_timestamp | Timestamp | Convert to `YYYY-MM-DDTHH:MM:SSZ`, nullify if > current time |
+| UDX_ADHOC | adhocClass.py | BirthDate | Date | Convert to `YYYY-MM-DD`, nullify if > today |
+|  |  | SourceSystemLastUpdateDate | Date | Convert to `YYYY-MM-DD`, nullify if > today |
+| UDX_FNBO | fnboClass.py | AccountOpenDate | Date | Convert to `YYYY-MM-DD`, nullify if > today |
+|  |  | SourceSystemLastUpdateDate | Date | Convert to `YYYY-MM-DD`, nullify if > today |
+|  |  | record_created_timestamp | Timestamp | Convert to `YYYY-MM-DDTHH:MM:SSZ`, nullify if > current time |
+|  |  | record_last_updated_timestamp | Timestamp | Convert to `YYYY-MM-DDTHH:MM:SSZ`, nullify if > current time |
+| UOR_COLORVISION | colorvisionClass.py | OptInDate | Date | Convert to `YYYY-MM-DD`, nullify if > today |
+|  |  | OptOutDate | Date | Convert to `YYYY-MM-DD`, nullify if > today |
+|  |  | SourceSystemLastUpdateDate | Date | Convert to `YYYY-MM-DD`, nullify if > today |
+| UOR_COMMERCE_CART | commerceCartClass.py | transaction_date | Date | Convert to `YYYY-MM-DD`, nullify if > today |
+|  |  | checkout_timestamp | Timestamp | Convert to `YYYY-MM-DDTHH:MM:SSZ`, nullify if > current time |
+|  |  | record_created_timestamp | Timestamp | Convert to `YYYY-MM-DDTHH:MM:SSZ`, nullify if > current time |
+| USH_DENALI | denaliClass.py | reservation_date | Date | Convert to `YYYY-MM-DD`, nullify if > today |
+|  |  | last_modified_date | Date | Convert to `YYYY-MM-DD`, nullify if > today |
+|  |  | record_created_timestamp | Timestamp | Convert to `YYYY-MM-DDTHH:MM:SSZ`, nullify if > current time |
+|  |  | record_last_updated_timestamp | Timestamp | Convert to `YYYY-MM-DDTHH:MM:SSZ`, nullify if > current time |
