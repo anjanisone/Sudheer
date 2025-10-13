@@ -5,79 +5,71 @@
 import pandas as pd
 from datetime import datetime, timezone
 
-# ---------- Embedded Date/Timestamp Cleanup (Pandas) ----------
-def clean_all_date_fields(df: pd.DataFrame) -> pd.DataFrame:
+# ---------- Embedded Date/Timestamp Cleanup (Spark) ----------
+def clean_all_date_fields(df):
     """
-    Cleans and standardizes all date/timestamp fields (Pandas):
-      - Trim & normalize
-      - Replace placeholders with null
-      - Parse many date/time formats (incl. month names)
-      - Nullify out-of-range (year<1900 or >current) and future values
-      - Output formats:
-          * Date-like    -> YYYY-MM-DD
-          * Timestamp-like-> YYYY-MM-DDTHH:MM:SS.mmmZ
+    Cleans and standardizes all date/timestamp fields in a Spark DataFrame.
+
+    - Trims whitespace
+    - Replaces placeholders with null
+    - Parses multiple date/time formats (including month names)
+    - Nullifies out-of-range or future values
+    - Formats all valid dates/timestamps into ISO 8601
+
+    Returns: Spark DataFrame
     """
+    from datetime import datetime
+    from pyspark.sql import functions as F
+
     now = datetime.now()
     current_year = now.year
     min_year = 1900
-    invalid_values = {"null", "none", "n/a", "missing", "not null", "", "na"}
 
-    # Work on a copy to avoid mutating caller unintentionally
-    df = df.copy()
+    invalid_values = ["null", "none", "n/a", "missing", "not null", "", "na"]
+    date_cols = [c for c in df.columns if any(x in c.lower() for x in ["date", "timestamp", "time"])]
 
-    for col in list(df.columns):
-        if any(x in col.lower() for x in ["date", "timestamp", "time"]):
-            # Normalize text / placeholders
-            df[col] = df[col].apply(lambda v: None if (v is None) else str(v).strip())
-            df[col] = df[col].apply(lambda v: None if (v is None or str(v).lower() in invalid_values) else v)
+    for c in date_cols:
+        # Trim and replace invalid placeholders
+        df = df.withColumn(c, F.trim(F.col(c)))
+        df = df.withColumn(c, F.when(F.col(c).isin(invalid_values), None).otherwise(F.col(c)))
 
-            # Try a range of formats (vectorized-ish passes with errors='ignore')
-            formats = [
-                "%Y-%m-%d %H:%M:%S",
-                "%Y/%m/%d %H:%M:%S",
-                "%Y%m%d%H%M%S",
-                "%Y-%m-%dT%H:%M:%S",
-                "%Y-%m-%d",
-                "%Y/%m/%d",
-                "%m/%d/%Y",
-                "%d-%m-%Y",
-                "%d/%m/%Y",
-                "%Y%m%d",
-                "%b %d, %Y",   # Aug 06, 2023
-                "%B %d, %Y",   # August 06, 2023
-                "%d-%b-%Y",    # 06-Aug-2023
-                "%d-%B-%Y",    # 06-August-2023
-            ]
-            # Progressive parsing: only convert values still strings or not yet datetimes
-            for fmt in formats:
-                try:
-                    mask = df[col].notna()
-                    df.loc[mask, col] = pd.to_datetime(df.loc[mask, col], format=fmt, errors="ignore")
-                except Exception:
-                    # keep going on format failures
-                    pass
+        # Try multiple parsing formats (date & timestamp)
+        parsed = F.coalesce(
+            F.to_timestamp(F.col(c), "yyyy-MM-dd HH:mm:ss"),
+            F.to_timestamp(F.col(c), "yyyy/MM/dd HH:mm:ss"),
+            F.to_timestamp(F.col(c), "yyyyMMddHHmmss"),
+            F.to_timestamp(F.col(c), "yyyy-MM-dd'T'HH:mm:ss"),
+            F.to_date(F.col(c), "yyyy-MM-dd"),
+            F.to_date(F.col(c), "yyyy/MM/dd"),
+            F.to_date(F.col(c), "MM/dd/yyyy"),
+            F.to_date(F.col(c), "dd-MM-yyyy"),
+            F.to_date(F.col(c), "dd/MM/yyyy"),
+            F.to_date(F.col(c), "yyyyMMdd"),
+            F.to_date(F.col(c), "MMM dd, yyyy"),
+            F.to_date(F.col(c), "MMMM dd, yyyy"),
+            F.to_date(F.col(c), "dd-MMM-yyyy"),
+            F.to_date(F.col(c), "dd-MMMM-yyyy")
+        )
+        df = df.withColumn(c, parsed)
 
-            # Nullify out-of-range or future
-            def _nullify(v):
-                if pd.isna(v):
-                    return None
-                if not isinstance(v, pd.Timestamp):
-                    return v  # already string that failed parsing; keep as-is and will be turned None below
-                if v.year < min_year or v.year > current_year or v.to_pydatetime() > now:
-                    return None
-                return v
+        # Nullify invalid or future values
+        df = df.withColumn(
+            c,
+            F.when(
+                (F.year(F.col(c)) < min_year) |
+                (F.year(F.col(c)) > current_year) |
+                (F.col(c) > F.lit(now)),
+                None
+            ).otherwise(F.col(c))
+        )
 
-            df[col] = df[col].apply(_nullify)
-
-            # Final formatting to ISO
-            if "timestamp" in col.lower() or "time" in col.lower():
-                df[col] = df[col].apply(
-                    lambda x: x.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z" if isinstance(x, pd.Timestamp) else None
-                )
-            else:
-                df[col] = df[col].apply(
-                    lambda x: x.strftime("%Y-%m-%d") if isinstance(x, pd.Timestamp) else None
-                )
+        # Convert to ISO 8601 format
+        iso_format = (
+            "yyyy-MM-dd'T'HH:mm:ss'Z'"
+            if ("timestamp" in c.lower() or "time" in c.lower())
+            else "yyyy-MM-dd"
+        )
+        df = df.withColumn(c, F.date_format(F.col(c), iso_format))
 
     return df
 
