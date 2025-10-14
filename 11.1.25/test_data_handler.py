@@ -48,11 +48,14 @@ def clean_all_date_fields(df: pd.DataFrame) -> pd.DataFrame:
         ]
 
         for fmt in formats:
-            try:
-                mask = df[col].notna()
-                df.loc[mask, col] = pd.to_datetime(df.loc[mask, col], format=fmt, errors="ignore")
-            except Exception:
-                pass
+            str_mask = df[col].notna() & df[col].apply(lambda x: isinstance(x, str))
+            if not str_mask.any():
+                continue
+
+            original = df.loc[str_mask, col]
+            parsed = pd.to_datetime(original, format=fmt, errors="coerce")
+            df.loc[str_mask, col] = parsed.where(parsed.notna(), original)
+
 
         def _nullify(v):
             if pd.isna(v):
