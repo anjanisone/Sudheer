@@ -140,21 +140,17 @@ class CommonLibrary:
 
                 # Parse multiple date/time formats (supports month names too)
                 parsed = F.coalesce(
-                    F.to_timestamp(F.col(c), "yyyy-MM-dd HH:mm:ss"),
-                    F.to_timestamp(F.col(c), "yyyy/MM/dd HH:mm:ss"),
-                    F.to_timestamp(F.col(c), "yyyyMMddHHmmss"),
-                    F.to_timestamp(F.col(c), "yyyy-MM-dd'T'HH:mm:ss"),
-                    F.to_date(F.col(c), "yyyy-MM-dd"),
-                    F.to_date(F.col(c), "yyyy/MM/dd"),
-                    F.to_date(F.col(c), "MM/dd/yyyy"),
-                    F.to_date(F.col(c), "dd-MM-yyyy"),
-                    F.to_date(F.col(c), "dd/MM/yyyy"),
-                    F.to_date(F.col(c), "yyyyMMdd"),
-                    F.to_date(F.col(c), "MMM dd, yyyy"),
-                    F.to_date(F.col(c), "MMMM dd, yyyy"),
-                    F.to_date(F.col(c), "dd-MMM-yyyy"),
-                    F.to_date(F.col(c), "dd-MMMM-yyyy"),
-                )
+                        F.to_date(F.col(c), "yyyy-MM-dd"),
+                        F.to_date(F.col(c), "yyyy/MM/dd"),
+                        F.to_date(F.col(c), "MM/dd/yyyy"),
+                        F.to_date(F.col(c), "dd-MM-yyyy"),
+                        F.to_date(F.col(c), "dd/MM/yyyy"),
+                        F.to_date(F.col(c), "yyyyMMdd"),
+                        F.to_date(F.col(c), "MMM dd, yyyy"),
+                        F.to_date(F.col(c), "MMMM dd, yyyy"),
+                        F.to_date(F.col(c), "dd-MMM-yyyy"),
+                        F.to_date(F.col(c), "dd-MMMM-yyyy")
+                    )
                 df = df.withColumn(c, parsed)
 
                 # Nullify out-of-range or invalid years
@@ -478,3 +474,4 @@ class CommonLibrary:
 
 # Creating a singleton instance for ease of use
 common_lib = CommonLibrary()
+
