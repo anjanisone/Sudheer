@@ -1,0 +1,8 @@
+The document has these code snippets:
+config/cleanup_opensearch_email.json
+config/cleanup_neptune_email.json
+scripts/os_email_dedupe.py
+scripts/neptune_email_dedupe_sagemaker.py
+scripts/neptune_email_dedupe_glue.py
+requirements.txt (already shared in the previous document)
+quick start and validation commands
