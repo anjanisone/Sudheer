@@ -1,22 +1,37 @@
-import boto3
+import sys
 import uuid
 import json
+import boto3
 import pandas as pd
 from datetime import datetime
 from io import BytesIO
+
+from awsglue.utils import getResolvedOptions
 from opensearchpy import OpenSearch, RequestsHttpConnection
 from requests_aws4auth import AWS4Auth
 
 
-# ------------------------------------------------
-# CONFIGURATION
-# ------------------------------------------------
+# ---------------------------------------------------
+# LOAD GLUE JOB PARAMETERS
+# ---------------------------------------------------
+
+args = getResolvedOptions(
+    sys.argv,
+    [
+        'temp_s3_bucket',
+        'output_s3_bucket',
+        'ES_HOST',
+        'ES_REGION',
+        'ES_IAM_MASTER_USER_ARN'
+    ]
+)
+
+
+# ---------------------------------------------------
+# CONFIG CLASS
+# ---------------------------------------------------
 
 class Config:
-
-    REGION = "us-east-1"
-
-    BUCKET = "udx-cust-mesh-p-scratch-space"
 
     INPUT_PREFIX = "opensearch_cleanup_inputs/Unprocessed/"
     PROCESSED_PREFIX = "opensearch_cleanup_inputs/Processed/"
@@ -26,14 +41,18 @@ class Config:
 
     INDEX_NAME = "udx_identity"
 
-    OPENSEARCH_HOST = "YOUR_OPENSEARCH_ENDPOINT"
+    DYNAMODB_TABLE = "udx-cust-mesh-p-neptune-status-table-prod"
 
-    DYNAMODB_TABLE = "neptune_status_table"
+    REGION = args['ES_REGION']
+    OPENSEARCH_HOST = args['ES_HOST']
+
+    TEMP_BUCKET = args['temp_s3_bucket']
+    OUTPUT_BUCKET = args['output_s3_bucket']
 
 
-# ------------------------------------------------
+# ---------------------------------------------------
 # S3 MANAGER
-# ------------------------------------------------
+# ---------------------------------------------------
 
 class S3Manager:
 
@@ -43,37 +62,34 @@ class S3Manager:
     def get_unprocessed_file(self):
 
         response = self.s3.list_objects_v2(
-            Bucket=Config.BUCKET,
+            Bucket=Config.TEMP_BUCKET,
             Prefix=Config.INPUT_PREFIX
         )
 
-        if "Contents" not in response:
-            raise Exception("No files in Unprocessed folder")
-
-        for obj in response["Contents"]:
+        for obj in response.get("Contents", []):
             key = obj["Key"]
             if key.endswith(".csv"):
                 return key
 
-        raise Exception("No CSV file found")
+        raise Exception("No CSV found in Unprocessed folder")
 
     def read_csv(self, key):
 
         obj = self.s3.get_object(
-            Bucket=Config.BUCKET,
+            Bucket=Config.TEMP_BUCKET,
             Key=key
         )
 
         return pd.read_csv(obj["Body"])
 
-    def backup_document(self, doc_id, document):
+    def backup_document(self, doc_id, doc):
 
         key = f"{Config.BACKUP_PREFIX}{doc_id}.json"
 
         self.s3.put_object(
-            Bucket=Config.BUCKET,
+            Bucket=Config.TEMP_BUCKET,
             Key=key,
-            Body=json.dumps(document).encode("utf-8")
+            Body=json.dumps(doc).encode()
         )
 
     def save_parquet(self, df, job_id):
@@ -84,33 +100,34 @@ class S3Manager:
         key = f"{Config.PARQUET_PREFIX}{job_id}/remediated.parquet"
 
         self.s3.put_object(
-            Bucket=Config.BUCKET,
+            Bucket=Config.OUTPUT_BUCKET,
             Key=key,
             Body=buffer.getvalue()
         )
 
-        return f"s3://{Config.BUCKET}/{key}"
+        return f"s3://{Config.OUTPUT_BUCKET}/{key}"
 
     def move_to_processed(self, key):
 
         filename = key.split("/")[-1]
+
         new_key = f"{Config.PROCESSED_PREFIX}{filename}"
 
         self.s3.copy_object(
-            Bucket=Config.BUCKET,
-            CopySource={"Bucket": Config.BUCKET, "Key": key},
+            Bucket=Config.TEMP_BUCKET,
+            CopySource={"Bucket": Config.TEMP_BUCKET, "Key": key},
             Key=new_key
         )
 
         self.s3.delete_object(
-            Bucket=Config.BUCKET,
+            Bucket=Config.TEMP_BUCKET,
             Key=key
         )
 
 
-# ------------------------------------------------
+# ---------------------------------------------------
 # OPENSEARCH MANAGER
-# ------------------------------------------------
+# ---------------------------------------------------
 
 class OpenSearchManager:
 
@@ -170,58 +187,69 @@ class OpenSearchManager:
         self.client.bulk(body)
 
 
-# ------------------------------------------------
+# ---------------------------------------------------
 # IDENTITY PROCESSOR
-# ------------------------------------------------
+# ---------------------------------------------------
 
 class IdentityProcessor:
 
     def regenerate(self, source):
 
-        new_uxid = str(uuid.uuid4())
+        now = datetime.utcnow().isoformat()
 
         old_uxid = source.get("uxid")
 
-        past = source.get("past_uxids", [])
+        new_uxid = str(uuid.uuid4())
+
+        past_uxids = source.get("past_uxids", [])
 
         if old_uxid:
-            past.append({
+
+            past_uxids.append({
                 "uxid": old_uxid,
-                "uxid_last_changed_timestamp": datetime.utcnow().isoformat()
+                "uxid_confidence": source.get("uxid_confidence", 1.0),
+                "uxid_last_changed_timestamp": now
             })
 
         source["uxid"] = new_uxid
-        source["past_uxids"] = past
+
+        source["uxid_confidence"] = 1.0
+
+        source["past_uxids"] = past_uxids
+
+        source["created_timestamp"] = now
+
+        source["last_updated_timestamp"] = now
 
         return source
 
 
-# ------------------------------------------------
-# PIPELINE TRIGGER
-# ------------------------------------------------
+# ---------------------------------------------------
+# DYNAMODB PIPELINE TRIGGER
+# ---------------------------------------------------
 
 class PipelineTrigger:
 
     def __init__(self):
         self.dynamo = boto3.client("dynamodb")
 
-    def trigger(self, job_id, record_count, data_path):
+    def trigger(self, job_id, count, path):
 
         self.dynamo.put_item(
             TableName=Config.DYNAMODB_TABLE,
             Item={
                 "IdResJobId": {"S": job_id},
                 "Status": {"S": "ready-for-neptune-load"},
-                "RecordCount": {"N": str(record_count)},
-                "DataPath": {"S": data_path},
+                "RecordCount": {"N": str(count)},
+                "DataPath": {"S": path},
                 "EventTime": {"S": datetime.utcnow().strftime("%Y%m%d%H%M%S")}
             }
         )
 
 
-# ------------------------------------------------
+# ---------------------------------------------------
 # MAIN JOB
-# ------------------------------------------------
+# ---------------------------------------------------
 
 class OpenSearchCleanupJob:
 
@@ -232,15 +260,15 @@ class OpenSearchCleanupJob:
         self.identity = IdentityProcessor()
         self.pipeline = PipelineTrigger()
 
-        self.job_id = datetime.utcnow().strftime("%Y%m%d%H%M%S") + "_adhoc_remediation"
+        self.job_id = datetime.utcnow().strftime("%Y%m%d%H%M%S")
 
-    def process(self):
+    def run(self):
 
         csv_key = self.s3.get_unprocessed_file()
 
         df = self.s3.read_csv(csv_key)
 
-        records_to_insert = []
+        records = []
         parquet_rows = []
 
         for _, row in df.iterrows():
@@ -260,15 +288,15 @@ class OpenSearchCleanupJob:
 
             new_source = self.identity.regenerate(source)
 
-            records_to_insert.append({
+            records.append({
                 "_id": doc_id,
                 "_source": new_source
             })
 
             parquet_rows.append(new_source)
 
-        if records_to_insert:
-            self.os.bulk_insert(records_to_insert)
+        if records:
+            self.os.bulk_insert(records)
 
         parquet_df = pd.DataFrame(parquet_rows)
 
@@ -283,12 +311,12 @@ class OpenSearchCleanupJob:
         self.s3.move_to_processed(csv_key)
 
 
-# ------------------------------------------------
-# ENTRY POINT
-# ------------------------------------------------
+# ---------------------------------------------------
+# ENTRY
+# ---------------------------------------------------
 
 if __name__ == "__main__":
 
     job = OpenSearchCleanupJob()
 
-    job.process()
+    job.run()
