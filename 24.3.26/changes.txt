@@ -1,0 +1,8 @@
+
+src/glue_jobs/incr_id_res_job/incr_id_res_job.py
+src/glue_jobs/glue_modules/id_resolution.py
+src/glue_jobs/glue_modules/args_and_constants.py
+terraform/glue.tf
+terraform/variables.tf
+terraform/iam.tf
+terraform/dynamodb.tf
