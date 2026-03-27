@@ -1,8 +1,10 @@
+import base64
 import hashlib
 import sys
 import json
 import logging
 import boto3
+from urllib.parse import quote_plus
 from boto3.dynamodb.types import TypeDeserializer
 import pytz
 from datetime import datetime, timedelta, timezone
@@ -38,6 +40,27 @@ NOTFOUND_NOT_ADDED = "NotFound & Not Added"
 DEFAULT_REVERSE_INPUT_TABLE = "STAGE.NBCU_REVERSE_INPUT"
 DEFAULT_REVERSE_CTRL_TABLE = "STAGE.NBCU_REVERSE_CTRL"
 DEFAULT_REVERSE_OUTPUT_TABLE = "STAGE.NBCU_REVERSE_OUTPUT"
+
+# Run in Snowflake (not from Glue). Customizable via DATABASE.SCHEMA prefixes for your account.
+NBCU_REVERSE_APPEND_TASK_DDL = r"""
+CREATE OR REPLACE TASK CUSTOMER_360.STAGE.NBCU_REVERSE_TASK
+  WAREHOUSE = DI_XSM_T5_03_WH
+  SCHEDULE = '1 MINUTE'
+AS
+  CALL CUSTOMER_360.STAGE.EXECUTE_REVERSE_APPEND(
+    (SELECT BATCH_ID
+       FROM CUSTOMER_360.STAGE.NBCU_REVERSE_CTRL
+      WHERE STATUS = 'NEW'
+      ORDER BY CREATED_TS
+      LIMIT 1)
+  );
+
+ALTER TASK CUSTOMER_360.STAGE.NBCU_REVERSE_TASK RESUME;
+""".strip()
+
+# Override with Glue arg --rea_reverse_append_debug_s3 for other environments.
+REA_MERGED_DEBUG_S3_DEFAULT = "s3://udx-cust-mesh-d-incr-data-out/intermediate_data/debugging/rea_debugging/"
+
 ENRICHABLE_ML_COLUMNS = [
     "ml_first_name",
     "ml_last_name",
@@ -61,6 +84,20 @@ def _optional_arg(name: str, default: str = "") -> str:
         if a == flag and i + 1 < len(sys.argv):
             return str(sys.argv[i + 1])
     return default
+
+
+def _rea_merged_debug_s3_path() -> str:
+    """Parquet snapshot after reverse-append preflight (merged batch entering ID resolution)."""
+    explicit = _optional_arg("rea_reverse_append_debug_s3", "").strip()
+    if explicit:
+        return explicit.rstrip("/") + "/"
+    return REA_MERGED_DEBUG_S3_DEFAULT
+
+
+def _write_rea_merged_debug_parquet(df_batch, path: str) -> None:
+    p = path.rstrip("/") + "/"
+    logging.getLogger(__name__).info("Writing reverse-append merged batch to %s", p)
+    df_batch.write.mode("overwrite").parquet(p)
 
 
 _ddb_deser = TypeDeserializer()
@@ -181,38 +218,128 @@ def _ddb_put_reverse_append_items(table_name: str, items: List[Dict[str, Any]]) 
             batch.put_item(Item={k: v for k, v in it.items() if v is not None and v != ""})
 
 
-def _secrets_get_json(secret_arn: str) -> Dict[str, str]:
+def _secrets_get_json(secret_arn: str) -> Dict[str, Any]:
     if not secret_arn or secret_arn.strip().upper() in ("", "DISABLED", "NONE", "NOT_CONFIGURED"):
         return {}
     resp = boto3.client("secretsmanager").get_secret_value(SecretId=secret_arn)
     return json.loads(resp.get("SecretString") or "{}")
 
 
-def _snowflake_jdbc_url_and_props(secret: Dict[str, str]) -> Tuple[str, Dict[str, str]]:
-    account = secret.get("account") or secret.get("ACCOUNT")
-    user = secret.get("user") or secret.get("username") or secret.get("USER")
-    password = secret.get("password") or secret.get("PASSWORD")
-    warehouse = secret.get("warehouse") or secret.get("WAREHOUSE")
-    database = secret.get("database") or secret.get("DATABASE")
-    schema = secret.get("schema") or secret.get("SCHEMA", "PUBLIC")
-    if not all([account, user, password]):
-        raise ValueError("Snowflake secret must include account, user, and password")
-    host = account if ".snowflakecomputing.com" in str(account) else f"{account}.snowflakecomputing.com"
+def _sf_secret_pick(secret: Dict[str, Any], *keys: str) -> Optional[str]:
+    for k in keys:
+        v = secret.get(k)
+        if v is not None and str(v).strip():
+            return str(v).strip()
+    return None
+
+
+def _snowflake_jdbc_host(secret: Dict[str, Any]) -> str:
+    """
+    Prefer sfURL (e.g. https://xyz.us-east-1.aws.snowflakecomputing.com); else sfAccount / legacy account.
+    """
+    sf_url = _sf_secret_pick(secret, "sfURL", "sf_url", "SFURL")
+    if sf_url:
+        h = sf_url.replace("https://", "").replace("http://", "").strip().split("/")[0]
+        if h:
+            return h
+    acct = _sf_secret_pick(
+        secret,
+        "sfAccount",
+        "sf_account",
+        "account",
+        "ACCOUNT",
+    )
+    if not acct:
+        raise ValueError("Snowflake secret must include sfURL or sfAccount (or legacy account)")
+    if ".snowflakecomputing.com" in acct:
+        return acct
+    return f"{acct}.snowflakecomputing.com"
+
+
+def _snowflake_jdbc_url_and_props(secret: Dict[str, Any]) -> Tuple[str, Dict[str, str]]:
+    """
+    Supports Secrets Manager JSON with NBCU-style keys (sfUser, sfDatabase, sfSchema, sfWarehouse,
+    sfRole, sfURL / sfAccount, pem_private_key, sfPassphrase) or legacy keys (user, password, …).
+
+    Key-pair auth uses JDBC private_key_base64 + authenticator=snowflake_jwt (Snowflake JDBC 3.14+).
+    """
+    user = _sf_secret_pick(
+        secret,
+        "sfUser",
+        "sf_user",
+        "user",
+        "username",
+        "USER",
+        "USERNAME",
+    )
+    if not user:
+        raise ValueError("Snowflake secret must include sfUser or user")
+
+    warehouse = _sf_secret_pick(secret, "sfWarehouse", "sf_warehouse", "warehouse", "WAREHOUSE")
+    database = _sf_secret_pick(secret, "sfDatabase", "sf_database", "database", "DATABASE")
+    schema = _sf_secret_pick(secret, "sfSchema", "sf_schema", "schema", "SCHEMA") or "PUBLIC"
+    role = _sf_secret_pick(secret, "sfRole", "sf_role", "role", "ROLE")
+
+    password = _sf_secret_pick(
+        secret,
+        "password",
+        "PASSWORD",
+        "sfPassword",
+        "sf_password",
+    )
+    pem_b64 = _sf_secret_pick(secret, "pem_private_key", "private_key_pem", "PEM_PRIVATE_KEY")
+    passphrase = _sf_secret_pick(secret, "sfPassphrase", "sf_passphrase", "private_key_file_pwd", "SF_PASSPHRASE")
+
+    host = _snowflake_jdbc_host(secret)
     url = f"jdbc:snowflake://{host}/"
-    params = []
+    params: List[str] = []
     if warehouse:
-        params.append(f"warehouse={warehouse}")
+        params.append(f"warehouse={quote_plus(warehouse)}")
     if database:
-        params.append(f"db={database}")
+        params.append(f"db={quote_plus(database)}")
     if schema:
-        params.append(f"schema={schema}")
+        params.append(f"schema={quote_plus(schema)}")
+    if role:
+        params.append(f"role={quote_plus(role)}")
     if params:
         url = url + "?" + "&".join(params)
-    props = {
+
+    props: Dict[str, str] = {
         "user": user,
-        "password": password,
         "driver": "net.snowflake.client.jdbc.SnowflakeDriver",
     }
+
+    if pem_b64:
+        try:
+            from cryptography.hazmat.backends import default_backend
+            from cryptography.hazmat.primitives import serialization
+        except ImportError as ex:
+            raise ImportError(
+                "Snowflake key-pair auth requires the cryptography package on the Glue job classpath."
+            ) from ex
+
+        pem_str = pem_b64.replace("\\n", "\n").strip()
+        if not pem_str.startswith("-----BEGIN"):
+            raise ValueError("pem_private_key must be a PEM string (BEGIN … PRIVATE KEY)")
+
+        pem_bytes = pem_str.encode("utf-8")
+        pass_bytes = passphrase.encode("utf-8") if passphrase else None
+        pkey = serialization.load_pem_private_key(pem_bytes, password=pass_bytes, backend=default_backend())
+        pkcs8_der = pkey.private_bytes(
+            encoding=serialization.Encoding.DER,
+            format=serialization.PrivateFormat.PKCS8,
+            encryption_algorithm=serialization.NoEncryption(),
+        )
+        props["private_key_base64"] = base64.standard_b64encode(pkcs8_der).decode("utf-8")
+        props["authenticator"] = "snowflake_jwt"
+    elif password:
+        props["password"] = password
+    else:
+        raise ValueError(
+            "Snowflake secret must include pem_private_key (and optional sfPassphrase) for JWT auth, "
+            "or password / sfPassword for password auth."
+        )
+
     return url, props
 
 
@@ -646,6 +773,8 @@ def main():
 
             df_batch = convert_spark_dataframe_columns_to_string(df_batch)
             df_batch = run_reverse_append_preflight(df_batch, spark, job_args)
+
+            _write_rea_merged_debug_parquet(df_batch, _rea_merged_debug_s3_path())
 
             perform_id_resolution_single_batch(
                 df_batch,
